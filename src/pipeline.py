@@ -193,7 +193,7 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
                 "1) 后端开发：完成交付；无需后端则说明\n"
                 "2) 前端开发：在后端基础上完成前端\n"
                 "3) 代码评审：用 list_files/read_file 评审\n"
-                "4) QA：用 list_files/read_file/run_cmd 测试，最后一条消息以「【全部完成】」结尾\n"
+                "4) QA：用 list_files/read_file/run_cmd 测试，最后按你的角色约定输出完成标记\n"
                 "前一步未完成不要跳到下一步。"
             )
             selector_team = SelectorGroupChat(
