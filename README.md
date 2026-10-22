@@ -75,6 +75,9 @@ default:
   base_url: "https://api.deepseek.com/v1"
   temperature: 0.2
 
+# 单次运行预算上限（元），0 = 不限
+budget_cny: 0
+
 # 可选：按角色单独配置（未填字段回落到 default）
 roles:
   # arch:

@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QSizePolicy, QToolButton, QDialog, QFormLayout,
     QDialogButtonBox, QComboBox, QTabWidget, QGroupBox, QCheckBox,
-    QInputDialog, QMessageBox,
+    QInputDialog, QMessageBox, QDoubleSpinBox,
 )
 import yaml
 
@@ -103,9 +103,15 @@ def config_dialog(parent=None, first_run: bool = False) -> bool:
     key_edit.setPlaceholderText("sk-...")
     model_edit = QLineEdit(default.get("model", "deepseek-flash"))
     base_edit = QLineEdit(default.get("base_url", "https://api.deepseek.com/v1"))
+    budget_edit = QDoubleSpinBox()
+    budget_edit.setRange(0, 100000)
+    budget_edit.setDecimals(2)
+    budget_edit.setValue(float(default.get("budget_cny", 0) or 0))
+    budget_edit.setPrefix("¥ ")
     form.addRow("API Key", key_edit)
     form.addRow("模型", model_edit)
     form.addRow("Base URL", base_edit)
+    form.addRow("预算（0=不限）", budget_edit)
     form.addRow(QLabel("未单独配置的角色都使用这里的设置。"))
     tabs.addTab(unified, "统一配置")
 
@@ -163,6 +169,7 @@ def config_dialog(parent=None, first_run: bool = False) -> bool:
         "api_key": key_edit.text().strip(),
         "base_url": base_edit.text().strip() or "https://api.deepseek.com/v1",
         "temperature": 0.2,
+        "budget_cny": float(budget_edit.value()),
     })
     if not first_run:
         roles = {}
@@ -196,6 +203,7 @@ class MainWindow(QMainWindow):
         self.running = False
         self.pending = None
         self.dm_running = set()
+        self.usage = {}
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -292,6 +300,11 @@ class MainWindow(QMainWindow):
         self.status = QLabel("⚪ 空闲")
         self.status.setStyleSheet("color:#8b95a7;padding:4px;")
         sv.addWidget(self.status)
+
+        self.cost_label = QLabel("本次：0 tokens · ¥0.0000")
+        self.cost_label.setStyleSheet("color:#8b95a7;font-size:11px;padding:4px;")
+        self.cost_label.setWordWrap(True)
+        sv.addWidget(self.cost_label)
         root.addWidget(side)
 
         # 右侧
@@ -346,6 +359,7 @@ class MainWindow(QMainWindow):
         self.pending = None
         self.running = False
         self.dm_running = set()
+        self.usage = {}
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -547,6 +561,14 @@ class MainWindow(QMainWindow):
             s = "⚪ 空闲"
         self.status.setText(f"状态：{s}")
         self.stop_btn.setEnabled(self.running)
+        u = self.usage or {}
+        total = int(u.get("total_input", 0)) + int(u.get("total_output", 0))
+        cost = float(u.get("total_cost", 0) or 0)
+        budget = float(u.get("budget_cny", 0) or 0)
+        text = f"本次：{total} tokens · ¥{cost:.4f}"
+        if budget > 0:
+            text += f" / 预算 ¥{budget:.2f}"
+        self.cost_label.setText(text)
 
     def _refresh(self):
         self._refresh_header()
@@ -581,6 +603,7 @@ class MainWindow(QMainWindow):
         self.pending = None
         self.running = False
         self.dm_running = set()
+        self.usage = {}
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -602,6 +625,7 @@ class MainWindow(QMainWindow):
         self.log.append({"kind": "text", "source": "user", "text": req, "target": None})
         self.pending = None
         self.running = True
+        self.usage = {}
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -682,6 +706,11 @@ class MainWindow(QMainWindow):
             elif kind == "dm_done":
                 self.dm_running.discard(ev[1])
                 self._save_session()
+            elif kind == "usage":
+                try:
+                    self.usage = json.loads(ev[2])
+                except Exception:
+                    pass
             else:
                 self.log.append({"kind": ev[0], "source": ev[1],
                                  "text": ev[2], "target": None})

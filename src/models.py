@@ -85,19 +85,24 @@ def _checked(cfg: dict) -> dict:
 
 
 def make_client(model: str | None = None, temperature: float | None = None,
-                role: str | None = None):
+                role: str | None = None, tracker=None):
     """role 不为空时使用该角色的覆盖配置；否则使用统一配置。"""
     cfg = _checked(resolve_role_cfg(role))
     provider = str(cfg.get("provider", "deepseek")).lower()
     info = dict(DEFAULT_MODEL_INFO)
     info["family"] = "deepseek" if provider == "deepseek" else "unknown"
-    return OpenAIChatCompletionClient(
-        model=model or cfg["model"],
+    resolved_model = model or cfg["model"]
+    client = OpenAIChatCompletionClient(
+        model=resolved_model,
         api_key=cfg["api_key"],
         base_url=cfg["base_url"],
         temperature=temperature if temperature is not None else cfg.get("temperature", 0.2),
         model_info=info,
     )
+    if tracker is not None:
+        from .usage import instrument_client
+        instrument_client(client, tracker, role or "selector", resolved_model)
+    return client
 
 
 def load_role_models() -> dict:

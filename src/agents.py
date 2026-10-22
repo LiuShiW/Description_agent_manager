@@ -28,7 +28,7 @@ def load_prompts() -> dict:
         return yaml.safe_load(f)
 
 
-def build_agents(dev_tools=None, inspect_tools=None):
+def build_agents(dev_tools=None, inspect_tools=None, tracker=None):
     """返回以角色 key 为键的 Agent 字典。
 
     dev_tools：给后端/前端（写代码、跑命令）
@@ -40,7 +40,7 @@ def build_agents(dev_tools=None, inspect_tools=None):
     inspect_tools = inspect_tools or []
 
     def cli(role):
-        return make_client(role=role)
+        return make_client(role=role, tracker=tracker)
 
     return {
         "pm": AssistantAgent("ProductManager", model_client=cli("pm"), system_message=p["pm"]),
