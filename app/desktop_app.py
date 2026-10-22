@@ -305,6 +305,10 @@ class MainWindow(QMainWindow):
         self.cost_label.setStyleSheet("color:#8b95a7;font-size:11px;padding:4px;")
         self.cost_label.setWordWrap(True)
         sv.addWidget(self.cost_label)
+        self.cost_btn = QPushButton("📊 成本详情")
+        self.cost_btn.setObjectName("ghost")
+        self.cost_btn.clicked.connect(self._show_usage)
+        sv.addWidget(self.cost_btn)
         root.addWidget(side)
 
         # 右侧
@@ -582,6 +586,23 @@ class MainWindow(QMainWindow):
         self.pending = None
         self._save_session()
         self._refresh()
+
+    def _show_usage(self):
+        u = self.usage or {}
+        roles = u.get("roles") or []
+        if not roles:
+            QMessageBox.information(self, "成本详情", "本次还没有用量记录。")
+            return
+        lines = [f"总计：{u.get('total_input', 0)} 输入 / {u.get('total_output', 0)} 输出 · ¥{u.get('total_cost', 0):.4f}"]
+        if u.get("budget_cny", 0):
+            lines.append(f"预算：¥{u['budget_cny']:.2f}")
+        lines.append("")
+        for r in roles:
+            lines.append(
+                f"{r.get('role', '')} · {r.get('model', '')}："
+                f"{r.get('input', 0)} / {r.get('output', 0)} tokens · "
+                f"¥{r.get('cost', 0):.4f}（{r.get('calls', 0)} 次）")
+        QMessageBox.information(self, "成本详情", "\n".join(lines))
 
     def _open_settings(self):
         if config_dialog(self, first_run=False):
