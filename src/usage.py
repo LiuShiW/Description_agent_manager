@@ -1,12 +1,14 @@
-"""Token 用量与成本统计（按实际模型计价），以及按项目持久化。
+"""Token 用量统计与按项目持久化（不计算金额，不设预算上限）。
 
-存储结构（项目目录/usage.json）：
+只记录 input/output token 与调用次数，避免内置模型价格滞后或误算。
+
+存储结构（项目根/usage.json）：
 {
-  "total": {"total_input":..., "total_output":..., "total_cost":..., "calls":..., "cost_known": true},
+  "total": {"total_input":..., "total_output":..., "total_tokens":..., "calls":...},
   "runs": [
     {"id":..., "time":..., "mode":"pipeline", "label":"...",
-     "total_input":..., "total_output":..., "total_cost":..., "calls":...,
-     "cost_known":true, "unknown_models":[], "roles":[...]}
+     "total_input":..., "total_output":..., "total_tokens":..., "calls":...,
+     "roles":[...]}
   ]
 }
 """
@@ -15,91 +17,36 @@ import json
 import threading
 import uuid
 
-import yaml
-
-from .paths import CONFIG_DIR
-
-# 人民币 / 百万 token。只内置已核实的 DeepSeek 价格；
-# 其他模型请在 config/models.yaml 的 pricing 中按官方价格填写。
-DEFAULT_PRICING = {
-    "deepseek-flash": {"input": 1.0, "output": 2.0},
-    "deepseek-v4-pro": {"input": 3.0, "output": 6.0},
-    "deepseek-v4-pro-0813": {"input": 3.0, "output": 6.0},
-}
-
-
-def _load_config() -> dict:
-    try:
-        return yaml.safe_load((CONFIG_DIR / "models.yaml").read_text(encoding="utf-8")) or {}
-    except Exception:
-        return {}
-
-
-def load_pricing() -> dict:
-    pricing = dict(DEFAULT_PRICING)
-    custom = _load_config().get("pricing") or {}
-    for model, p in custom.items():
-        if isinstance(p, dict):
-            pricing[model] = {
-                "input": float(p.get("input", 0) or 0),
-                "output": float(p.get("output", 0) or 0),
-            }
-    return pricing
-
-
-def load_budget() -> float:
-    try:
-        return float(_load_config().get("budget_cny", 0) or 0)
-    except Exception:
-        return 0.0
-
 
 class UsageTracker:
     def __init__(self):
         self._lock = threading.Lock()
         self._data = {}
-        self.pricing = load_pricing()
-        self.budget_cny = load_budget()
 
     def add(self, role: str, model: str, prompt_tokens: int, completion_tokens: int):
         role = role or "unknown"
         model = model or "unknown"
-        p = self.pricing.get(model)
-        known = p is not None
-        cost = 0.0
-        if known:
-            cost = ((prompt_tokens or 0) / 1e6 * p["input"]
-                    + (completion_tokens or 0) / 1e6 * p["output"])
         with self._lock:
             d = self._data.setdefault(role, {
-                "role": role, "model": model, "input": 0, "output": 0,
-                "calls": 0, "cost": 0.0, "known": True,
+                "role": role, "model": model, "input": 0, "output": 0, "calls": 0,
             })
             d["model"] = model
             d["input"] += int(prompt_tokens or 0)
             d["output"] += int(completion_tokens or 0)
             d["calls"] += 1
-            d["cost"] += cost
-            if not known:
-                d["known"] = False
 
     def snapshot(self) -> dict:
         with self._lock:
-            roles = sorted(self._data.values(), key=lambda x: -x["cost"])
-            unknown = sorted({r["model"] for r in roles if not r.get("known", True)})
+            roles = sorted(self._data.values(), key=lambda x: -(x["input"] + x["output"]))
+            total_in = sum(r["input"] for r in roles)
+            total_out = sum(r["output"] for r in roles)
             return {
-                "roles": [{**r, "cost": round(r["cost"], 6)} for r in roles],
-                "total_input": sum(r["input"] for r in roles),
-                "total_output": sum(r["output"] for r in roles),
-                "total_cost": round(sum(r["cost"] for r in roles), 6),
+                "roles": list(roles),
+                "total_input": total_in,
+                "total_output": total_out,
+                "total_tokens": total_in + total_out,
                 "calls": sum(r["calls"] for r in roles),
-                "cost_known": not unknown,
-                "unknown_models": unknown,
-                "budget_cny": self.budget_cny,
             }
-
-    def exceeded(self) -> bool:
-        return self.budget_cny > 0 and self.snapshot()["total_cost"] >= self.budget_cny
 
 
 class UsageStore:
@@ -130,10 +77,8 @@ class UsageStore:
             "label": (label or "")[:120],
             "total_input": snapshot.get("total_input", 0),
             "total_output": snapshot.get("total_output", 0),
-            "total_cost": snapshot.get("total_cost", 0.0),
+            "total_tokens": snapshot.get("total_tokens", 0),
             "calls": snapshot.get("calls", 0),
-            "cost_known": snapshot.get("cost_known", True),
-            "unknown_models": snapshot.get("unknown_models", []),
             "roles": snapshot.get("roles", []),
         }
         data["runs"].append(run)
@@ -145,12 +90,13 @@ class UsageStore:
 
     @staticmethod
     def _sum(runs) -> dict:
+        total_in = sum(r.get("total_input", 0) for r in runs)
+        total_out = sum(r.get("total_output", 0) for r in runs)
         return {
-            "total_input": sum(r.get("total_input", 0) for r in runs),
-            "total_output": sum(r.get("total_output", 0) for r in runs),
-            "total_cost": round(sum(r.get("total_cost", 0.0) for r in runs), 6),
+            "total_input": total_in,
+            "total_output": total_out,
+            "total_tokens": total_in + total_out,
             "calls": sum(r.get("calls", 0) for r in runs),
-            "cost_known": all(r.get("cost_known", True) for r in runs),
         }
 
 

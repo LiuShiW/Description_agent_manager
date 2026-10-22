@@ -107,14 +107,6 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
     def emit_usage():
         on_event("usage", "", json.dumps(usage.snapshot(), ensure_ascii=False))
 
-    def budget_exceeded() -> bool:
-        if usage.exceeded():
-            s = usage.snapshot()
-            on_event("stage", "", f"已超出预算（已用 ¥{s['total_cost']:.4f} / 预算 ¥{s['budget_cny']:.2f}），停止")
-            on_event("done", "", ws)
-            return True
-        return False
-
     def abort():
         on_event("stage", "", "已停止（Leader 取消）")
         on_event("done", "", ws)
@@ -132,9 +124,8 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
             on_event)
         prd_text = _strip_markers(_last_text(r1.messages, "ProductManager"))
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         # 阶段二：Leader 回答
@@ -154,9 +145,8 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
             on_event)
         arch_text = _strip_markers(_last_text(r3.messages, "Architect"))
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         # 阶段四：Leader 审批
@@ -175,18 +165,16 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
         base = f"{handoff}\n\n工作目录：{ws}"
 
         # 阶段五：串行 后端 -> 前端 -> 评审 -> QA
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
         r_be = await _consume(build_stage(agents["backend"]).run_stream(
             task=f"{base}\n\n你是后端开发。不要探测环境，直接完成交付："
                  f"若需后端代码用 write_file 写入工作目录；若无需后端，一句话说明即可。"), on_event)
         be_out = _last_text(r_be.messages, "BackendDev")
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         r_fe = await _consume(build_stage(agents["frontend"]).run_stream(
@@ -195,9 +183,8 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
                  f"完成后用 list_files 确认。"), on_event)
         fe_out = _last_text(r_fe.messages, "FrontendDev")
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         r_rv = await _consume(build_stage(agents["reviewer"]).run_stream(
@@ -205,18 +192,16 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
                  f"你是评审。用 list_files / read_file 查看工作目录代码，输出评审意见（通过/需要修改）。"), on_event)
         rv_out = _last_text(r_rv.messages, "Reviewer")
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         await _consume(build_stage(agents["qa"]).run_stream(
             task=f"{base}\n\n评审意见：\n{rv_out}\n\n"
                  f"你是QA。用 list_files / read_file / run_cmd 对工作目录代码做测试，输出测试报告。"), on_event)
         emit_usage()
-        if stopped() or budget_exceeded():
-            if stopped():
-                abort()
+        if stopped():
+            abort()
             return
 
         _cleanup_test_artifacts()

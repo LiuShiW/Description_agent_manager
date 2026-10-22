@@ -75,8 +75,6 @@ default:
   base_url: "https://api.deepseek.com/v1"
   temperature: 0.2
 
-# 单次运行预算上限（元），0 = 不限
-budget_cny: 0
 
 # 可选：按角色单独配置（未填字段回落到 default）
 roles:
@@ -91,15 +89,14 @@ roles:
 - DeepSeek OpenAI 兼容端点：`https://api.deepseek.com/v1`
 - 若以后接 Claude Code：Anthropic 兼容端点是 `https://api.deepseek.com/anthropic`（注意不是 `/v1`）
 
-## 💰 成本与用量
+## 🔢 Token 用量
 
-- 费用按**当前实际使用的模型**计价，价格表在 `config/models.yaml` 的 `pricing` 中配置。
-- 未配置价格的模型会显示「价格未配置」，**不会**套用 DeepSeek 或其他模型的价格。
+- **只统计 token，不计算金额**。各厂商价格、缓存命中、折扣、区域差异都会导致内置价格滞后或误算，因此不内置价格表。
+- 每次模型调用记录 input/output token 与实际模型名（仅用于展示/审计，不做金额换算）。
 - 用量按**项目**持久化：
   - 默认项目：应用根目录 `usage.json`
   - 新项目：`projects/<名称>/usage.json`
-- 每次运行/对话作为一条 `run` 记录，项目累计为所有 run 之和；成本详情可查看最近运行。
-- `budget_cny` 是单次运行预算上限，超出后自动停止。
+- 每次运行/对话作为一条 `run` 记录，项目累计为所有 run 之和；「用量详情」可查看本次运行、项目累计与最近运行。
 
 ## 📦 打包 Windows 可执行程序
 
@@ -135,7 +132,7 @@ build_exe.bat
 ## 🗺️ Roadmap
 
 - [ ] 多项目管理与会话历史
-- [ ] Token / 成本统计与预算上限
+- [x] Token 用量统计
 - [ ] 停止 / 重试 / 断点续跑
 - [ ] 多模型管理（DeepSeek / Kimi / OpenAI / Ollama）
 - [ ] 沙箱化代码执行（Docker / WSL）

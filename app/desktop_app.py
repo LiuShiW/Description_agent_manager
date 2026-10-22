@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QSizePolicy, QToolButton, QDialog, QFormLayout,
     QDialogButtonBox, QComboBox, QTabWidget, QGroupBox, QCheckBox,
-    QInputDialog, QMessageBox, QDoubleSpinBox,
+    QInputDialog, QMessageBox,
 )
 import yaml
 
@@ -105,15 +105,9 @@ def config_dialog(parent=None, first_run: bool = False) -> bool:
     key_edit.setPlaceholderText("sk-...")
     model_edit = QLineEdit(default.get("model", "deepseek-flash"))
     base_edit = QLineEdit(default.get("base_url", "https://api.deepseek.com/v1"))
-    budget_edit = QDoubleSpinBox()
-    budget_edit.setRange(0, 100000)
-    budget_edit.setDecimals(2)
-    budget_edit.setValue(float(default.get("budget_cny", 0) or 0))
-    budget_edit.setPrefix("¥ ")
     form.addRow("API Key", key_edit)
     form.addRow("模型", model_edit)
     form.addRow("Base URL", base_edit)
-    form.addRow("预算（0=不限）", budget_edit)
     form.addRow(QLabel("未单独配置的角色都使用这里的设置。"))
     tabs.addTab(unified, "统一配置")
 
@@ -171,7 +165,6 @@ def config_dialog(parent=None, first_run: bool = False) -> bool:
         "api_key": key_edit.text().strip(),
         "base_url": base_edit.text().strip() or "https://api.deepseek.com/v1",
         "temperature": 0.2,
-        "budget_cny": float(budget_edit.value()),
     })
     if not first_run:
         roles = {}
@@ -314,11 +307,11 @@ class MainWindow(QMainWindow):
         self.status.setStyleSheet("color:#8b95a7;padding:4px;")
         sv.addWidget(self.status)
 
-        self.cost_label = QLabel("本次：0 tokens · ¥0.0000")
+        self.cost_label = QLabel("本次：0 tokens\n项目累计：0 tokens")
         self.cost_label.setStyleSheet("color:#8b95a7;font-size:11px;padding:4px;")
         self.cost_label.setWordWrap(True)
         sv.addWidget(self.cost_label)
-        self.cost_btn = QPushButton("📊 成本详情")
+        self.cost_btn = QPushButton("📊 用量详情")
         self.cost_btn.setObjectName("ghost")
         self.cost_btn.clicked.connect(self._show_usage)
         sv.addWidget(self.cost_btn)
@@ -583,17 +576,11 @@ class MainWindow(QMainWindow):
         u = self.usage or {}
         pu = (self.project_usage or {}).get("total", {}) or {}
 
-        def _fmt(x):
-            total = int(x.get("total_input", 0)) + int(x.get("total_output", 0))
-            cost = float(x.get("total_cost", 0) or 0)
-            return f"{total} tokens · ¥{cost:.4f}"
+        def _tokens(x):
+            return int(x.get("total_tokens",
+                             int(x.get("total_input", 0)) + int(x.get("total_output", 0))))
 
-        text = f"本次：{_fmt(u)}\n项目累计：{_fmt(pu)}"
-        budget = float(u.get("budget_cny", 0) or 0)
-        if budget > 0:
-            text += f" / 预算 ¥{budget:.2f}"
-        if not u.get("cost_known", True) or not pu.get("cost_known", True):
-            text += "\n（部分模型未配置价格）"
+        text = f"本次：{_tokens(u)} tokens\n项目累计：{_tokens(pu)} tokens"
         self.cost_label.setText(text)
 
     def _refresh(self):
@@ -614,29 +601,28 @@ class MainWindow(QMainWindow):
         pu = (self.project_usage or {}).get("total", {}) or {}
         lines = ["【本次运行】"]
         if u.get("roles"):
-            lines.append(f"总计：{u.get('total_input', 0)} 输入 / {u.get('total_output', 0)} 输出 · ¥{u.get('total_cost', 0):.4f}")
+            lines.append(
+                f"总计：{u.get('total_input', 0)} 输入 / {u.get('total_output', 0)} 输出 / "
+                f"{u.get('total_tokens', 0)} tokens（{u.get('calls', 0)} 次调用）")
             for r in u["roles"]:
-                cost = f"¥{r.get('cost', 0):.4f}" if r.get("known", True) else "价格未配置"
                 lines.append(
                     f"  {r.get('role', '')} · {r.get('model', '')}："
-                    f"{r.get('input', 0)} / {r.get('output', 0)} tokens · "
-                    f"{cost}（{r.get('calls', 0)} 次）")
-            if not u.get("cost_known", True):
-                lines.append(f"  未配置价格的模型：{', '.join(u.get('unknown_models', []))}")
+                    f"{r.get('input', 0)} 输入 / {r.get('output', 0)} 输出"
+                    f"（{r.get('calls', 0)} 次）")
         else:
             lines.append("  暂无记录")
 
         lines += ["", "【项目累计】",
-                  f"{pu.get('total_input', 0)} 输入 / {pu.get('total_output', 0)} 输出 · "
-                  f"¥{pu.get('total_cost', 0):.4f}（{pu.get('calls', 0)} 次调用）"]
+                  f"{pu.get('total_input', 0)} 输入 / {pu.get('total_output', 0)} 输出 / "
+                  f"{pu.get('total_tokens', 0)} tokens（{pu.get('calls', 0)} 次调用）"]
         runs = (self.project_usage or {}).get("runs", [])
         if runs:
             lines += ["", "【最近运行】"]
             for r in runs[-5:]:
                 lines.append(
                     f"  {r.get('time', '')} · {r.get('mode', '')} · "
-                    f"¥{r.get('total_cost', 0):.4f} · {r.get('label', '')[:40]}")
-        QMessageBox.information(self, "成本详情", "\n".join(lines))
+                    f"{r.get('total_tokens', 0)} tokens · {r.get('label', '')[:40]}")
+        QMessageBox.information(self, "用量详情", "\n".join(lines))
 
     def _open_settings(self):
         if config_dialog(self, first_run=False):

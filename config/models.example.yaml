@@ -6,22 +6,8 @@ default:
   base_url: "https://api.deepseek.com/v1"
   temperature: 0.2
 
-# 单次运行预算上限（元），0 = 不限
-budget_cny: 0
-
-# 价格表（元 / 百万 token），按模型名称匹配当前实际使用的模型。
-# 未列出的模型会显示「价格未配置」，不会套用其他模型的价格。
-pricing:
-  deepseek-flash:
-    input: 1.0
-    output: 2.0
-  deepseek-v4-pro:
-    input: 3.0
-    output: 6.0
-  # 其他模型请按官方价格填写，例如：
-  # kimi-k3:
-  #   input: 0.0
-  #   output: 0.0
+# 只统计 token，不计算金额（各厂商价格/缓存/折扣差异较大，避免内置价格滞后）
+# 也不设预算上限。
 
 # 可选：按角色单独配置。未填写的字段回落到 default。
 roles:
