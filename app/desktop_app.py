@@ -24,13 +24,15 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QSizePolicy, QToolButton, QDialog, QFormLayout,
     QDialogButtonBox, QComboBox, QTabWidget, QGroupBox, QCheckBox,
+    QInputDialog, QMessageBox,
 )
 import yaml
 
 from src.pipeline import run_pipeline, run_direct
 from src.paths import app_root, CONFIG_DIR
 from src.models import role_override, save_model_cfg
-from src.tools.code_exec import WORKSPACE
+from src.projects import (list_projects, current_project, current_workspace,
+                          create_project, select_project, current_session_path)
 
 AGENTS = [
     ("pm", "产品经理", "🧑‍💼"),
@@ -188,7 +190,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AI 软件团队 · 桌面工作台")
         self.resize(1180, 780)
 
-        self.session_path = app_root() / "session.json"
+        self.session_path = current_session_path()
         self.log = self._load_session()
         self.view = "group"
         self.running = False
@@ -241,6 +243,19 @@ class MainWindow(QMainWindow):
         title = QLabel("👥 AI 软件团队")
         title.setStyleSheet("font-size:15px;font-weight:bold;padding:4px;")
         sv.addWidget(title)
+
+        sv.addWidget(QLabel("项目"))
+        self.project_combo = QComboBox()
+        for p in list_projects():
+            self.project_combo.addItem(p["name"])
+        self.project_combo.setCurrentText(current_project()["name"])
+        self.project_combo.currentTextChanged.connect(self._on_project_changed)
+        sv.addWidget(self.project_combo)
+
+        new_proj = QPushButton("＋ 新建项目")
+        new_proj.setObjectName("ghost")
+        new_proj.clicked.connect(self._new_project)
+        sv.addWidget(new_proj)
 
         self.sidebar = QListWidget()
         items = [("group", "💬  群聊（全体）")] + \
@@ -309,6 +324,46 @@ class MainWindow(QMainWindow):
         rlay.addWidget(self.input_host)
 
         self.sidebar.setCurrentRow(0)
+
+    # ---------- 项目 ----------
+    def _refresh_project_combo(self):
+        self.project_combo.blockSignals(True)
+        self.project_combo.clear()
+        for p in list_projects():
+            self.project_combo.addItem(p["name"])
+        self.project_combo.setCurrentText(current_project()["name"])
+        self.project_combo.blockSignals(False)
+
+    def _on_project_changed(self, name):
+        if not name:
+            return
+        try:
+            select_project(name)
+        except Exception:
+            return
+        self.session_path = current_session_path()
+        self.log = self._load_session()
+        self.pending = None
+        self.running = False
+        self.dm_running = set()
+        self.stop_event = threading.Event()
+        self.event_q = queue.Queue()
+        self.answer_q = queue.Queue()
+        self.view = "group"
+        self.sidebar.setCurrentRow(0)
+        self._refresh()
+
+    def _new_project(self):
+        name, ok = QInputDialog.getText(self, "新建项目", "项目名称：")
+        if not ok or not name.strip():
+            return
+        try:
+            create_project(name.strip())
+        except Exception as e:
+            QMessageBox.warning(self, "新建项目失败", str(e))
+            return
+        self._refresh_project_combo()
+        self._on_project_changed(name.strip())
 
     # ---------- 视图 ----------
     def _on_view_changed(self, row):

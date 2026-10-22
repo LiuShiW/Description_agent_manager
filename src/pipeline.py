@@ -11,9 +11,10 @@ from autogen_agentchat.messages import (TextMessage, ToolCallRequestEvent,
                                         ToolCallExecutionEvent, ThoughtEvent)
 from src.models import make_client
 from src.agents import build_agents
+from src.projects import current_workspace
 from src.teams import build_team, build_stage
 from src.tools.code_exec import (code_tool, write_file_tool, list_files_tool,
-                                 read_file_tool, hidden_subprocess_kwargs, WORKSPACE)
+                                 read_file_tool, hidden_subprocess_kwargs)
 
 ARCH_DONE = "交付完成"
 QA_DONE = "【全部完成】"
@@ -33,21 +34,23 @@ def _strip_markers(text: str) -> str:
 
 
 def _init_workspace() -> str:
-    WORKSPACE.mkdir(parents=True, exist_ok=True)
-    if not (WORKSPACE / ".git").exists():
-        subprocess.run(["git", "init"], cwd=str(WORKSPACE), capture_output=True,
+    ws = current_workspace()
+    ws.mkdir(parents=True, exist_ok=True)
+    if not (ws / ".git").exists():
+        subprocess.run(["git", "init"], cwd=str(ws), capture_output=True,
                        **hidden_subprocess_kwargs())
-    return str(WORKSPACE)
+    return str(ws)
 
 
 def _cleanup_test_artifacts():
     """QA 完成后清理测试脚本，不单独留存。"""
+    ws = current_workspace()
     for d in ("tests", "qa"):
-        p = WORKSPACE / d
+        p = ws / d
         if p.is_dir():
             shutil.rmtree(p, ignore_errors=True)
     for pat in ("*.test.js", "*-test.js", "test-*.js", "*_test.py", "test_*.py"):
-        for f in WORKSPACE.glob(pat):
+        for f in ws.glob(pat):
             try:
                 f.unlink()
             except Exception:

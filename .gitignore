@@ -31,3 +31,5 @@ Thumbs.db
 .idea/
 .vscode/
 session.json
+projects/
+projects.json

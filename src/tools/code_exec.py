@@ -13,9 +13,7 @@ import datetime
 from pathlib import Path
 from autogen_core.tools import FunctionTool
 
-from ..paths import WORKSPACE
-
-PROJECT_ROOT = WORKSPACE.parent
+from ..projects import current_workspace
 
 # 开发常用命令白名单。故意不含 rm/del/rmdir 等删除类命令。
 WHITELIST = {
@@ -69,10 +67,11 @@ def _reject_reason(command: str) -> str | None:
 
 
 def _resolve_ws(p: str) -> Path:
+    base = current_workspace()
     if not p:
-        return WORKSPACE
+        return base
     path = Path(p)
-    return path if path.is_absolute() else WORKSPACE / path
+    return path if path.is_absolute() else base / path
 
 
 def _ensure_workspace(cwd: Path) -> str:
