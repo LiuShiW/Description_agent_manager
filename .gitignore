@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local secrets and config
+config/models.yaml
+.env
+*.log
+
+# Build artifacts
+build/
+dist/
+_dist_workspace_backup/
+_remote_check/
+
+# Runtime workspace (generated projects)
+workspace/
+
+# Internal personal notes
+方案.md
+目标.md
+日志.md
+进度.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+session.json

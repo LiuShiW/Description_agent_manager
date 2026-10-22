@@ -1,0 +1,13 @@
+Description Agent Manager
+Copyright 2026 liuMou-dot
+
+This product includes third-party software:
+
+- Microsoft Agent Framework (autogen-agentchat, autogen-core, autogen-ext) - MIT License
+- PySide6 / Qt for Python - LGPLv3 (dynamic linking; source: https://code.qt.io/cgit/pyside/pyside-setup.git/)
+- PyYAML - MIT License
+- OpenAI Python SDK - Apache License 2.0
+- Pydantic - MIT License
+
+For LGPL components, users may replace the dynamically linked Qt libraries in the
+installed application directory. License texts are available from the respective projects.

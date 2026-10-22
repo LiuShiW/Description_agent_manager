@@ -1,0 +1,17 @@
+# 统一配置：所有角色默认使用
+default:
+  provider: deepseek
+  model: deepseek-flash
+  api_key: "sk-your-deepseek-api-key"
+  base_url: "https://api.deepseek.com/v1"
+  temperature: 0.2
+
+# 可选：按角色单独配置。未填写的字段回落到 default。
+# 可以只覆盖 model，也可以同时覆盖 api_key / base_url（例如不同角色用不同 Key）。
+roles:
+  # arch:
+  #   model: deepseek-v4-pro
+  # backend:
+  #   model: deepseek-v4-pro
+  #   api_key: sk-your-other-key
+  #   base_url: https://api.deepseek.com/v1

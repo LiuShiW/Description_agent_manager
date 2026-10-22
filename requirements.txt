@@ -1,0 +1,9 @@
+# 多智能体编排（Microsoft Agent Framework，含 GroupChat 群聊）
+autogen-agentchat
+autogen-ext[openai]
+# 配置解析
+pyyaml
+# 桌面端 UI（主程序）
+PySide6
+# 网页原型（保留）
+streamlit
