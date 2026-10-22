@@ -177,7 +177,7 @@ with st.sidebar:
     st.session_state.view = st.radio("视图", options, index=idx,
                                      format_func=lambda x: labels[x])
     mode = st.radio("协作模式", ["roundrobin", "selector"],
-                    format_func=lambda m: "串行接力" if m == "roundrobin" else "自动协作",
+                    format_func=lambda m: "串行接力" if m == "roundrobin" else "自动协作（SOP 约束）",
                     horizontal=True)
     st.divider()
     if st.session_state.running:

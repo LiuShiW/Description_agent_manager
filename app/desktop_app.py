@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
         sv.addWidget(QLabel("协作模式"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("串行接力", "roundrobin")
-        self.mode_combo.addItem("自动协作", "selector")
+        self.mode_combo.addItem("自动协作（SOP 约束）", "selector")
         sv.addWidget(self.mode_combo)
 
         self.settings_btn = QPushButton("⚙ 设置")

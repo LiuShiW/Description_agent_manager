@@ -11,6 +11,8 @@ import shutil
 import subprocess
 from autogen_agentchat.messages import (TextMessage, ToolCallRequestEvent,
                                         ToolCallExecutionEvent, ThoughtEvent)
+from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
+from autogen_agentchat.teams import SelectorGroupChat
 from src.models import make_client
 from src.agents import build_agents
 from src.projects import current_workspace, current_usage_path, current_memory_path
@@ -77,6 +79,24 @@ async def _consume(stream, on_event):
         if hasattr(item, "messages"):
             result = item
     return result
+
+
+SELECTOR_PROMPT = (
+    "你是开发团队调度器。参与者：{roles}。\n"
+    "阅读对话历史：\n{history}\n\n"
+    "当前只允许从这些角色中选择：{participants}。\n"
+    "请严格按候选顺序选择下一位，只返回一个角色名。"
+)
+
+
+def _selector_candidates(messages):
+    """强制 SOP 顺序：后端 -> 前端 -> 评审 -> QA；全部说过后只允许 QA。"""
+    order = ("BackendDev", "FrontendDev", "Reviewer", "QA")
+    spoken = {getattr(m, "source", "") for m in messages if isinstance(m, TextMessage)}
+    for name in order:
+        if name not in spoken:
+            return [name]
+    return ["QA"]
 
 
 async def run_pipeline(requirement: str, mode: str = "roundrobin",
@@ -163,6 +183,43 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
             on_event("done", "", ws)
             return
 
+
+        # 阶段五：自动协作（SOP 约束的 Selector）
+        if mode == "selector":
+            on_event("stage", "", "阶段五：自动协作（SOP 约束）")
+            selector_task = (
+                f"{memory.context_for('backend')}\n\n工作目录：{ws}\n\n"
+                "你们是开发团队，请严格按顺序协作：\n"
+                "1) 后端开发：完成交付；无需后端则说明\n"
+                "2) 前端开发：在后端基础上完成前端\n"
+                "3) 代码评审：用 list_files/read_file 评审\n"
+                "4) QA：用 list_files/read_file/run_cmd 测试，最后一条消息以「【全部完成】」结尾\n"
+                "前一步未完成不要跳到下一步。"
+            )
+            selector_team = SelectorGroupChat(
+                [agents["backend"], agents["frontend"], agents["reviewer"], agents["qa"]],
+                model_client=selector_llm,
+                selector_prompt=SELECTOR_PROMPT,
+                candidate_func=_selector_candidates,
+                allow_repeated_speaker=True,
+                max_turns=12,
+                termination_condition=(
+                    TextMentionTermination(QA_DONE) | MaxMessageTermination(20)
+                ),
+            )
+            r_dev = await _consume(selector_team.run_stream(task=selector_task), on_event)
+            for source, key in (("BackendDev", "backend"), ("FrontendDev", "frontend"),
+                                ("Reviewer", "review"), ("QA", "qa")):
+                memory.set(key, _last_text(r_dev.messages, source))
+            emit_usage()
+            if stopped():
+                abort()
+                return
+            _cleanup_test_artifacts()
+            on_event("stage", "", "已清理测试脚本（不保留）")
+            on_event("stage", "", "全部完成")
+            on_event("done", "", ws)
+            return
 
         # 阶段五：串行 后端 -> 前端 -> 评审 -> QA
         if stopped():
