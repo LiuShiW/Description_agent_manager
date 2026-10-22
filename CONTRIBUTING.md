@@ -24,7 +24,7 @@ On first launch, a setup dialog asks for your API key (BYOK). You can also copy
 ## Before submitting a PR
 
 - Keep changes focused and small.
-- Run a syntax check: `python -m py_compile main.py app/desktop_app.py src/**/*.py`
+- Run a syntax check: `python -m py_compile main.py app/desktop_app.py app/streamlit_app.py src/models.py src/agents.py src/teams.py src/pipeline.py src/paths.py src/tools/code_exec.py`
 - If you change the pipeline, run a small end-to-end task and describe the result.
 - Do not commit API keys, generated `workspace/` output, or build artifacts.
 

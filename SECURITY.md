@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please do not open a public issue for security problems. Contact the maintainer
-privately via GitHub (@Awen-alt) with a description and reproduction steps.
+privately via GitHub (@LiuShiW) with a description and reproduction steps.
 
 ## Important security notes
 
