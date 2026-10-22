@@ -156,8 +156,8 @@ roles:
 │   └── models.example.yaml # 模型配置模板
 ├── workspace/              # 运行时产出（不入库）
 ├── desktop_app.spec        # PyInstaller 配置
-├── 打包.bat               # 一键打包（自动备份/恢复）
-├── build_exe.bat          # 别名
+├── 打包.bat               # 中文入口（调用 build_exe.bat）
+├── build_exe.bat          # 实际打包脚本（ASCII）
 └── scripts/build_exe.py   # 打包逻辑
 ```
 

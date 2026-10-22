@@ -1,13 +1,2 @@
 @echo off
-cd /d "%~dp0"
-python -m pip install pyinstaller --quiet
-python -X utf8 scripts\build_exe.py
-if errorlevel 1 (
-  echo.
-  echo ??????????????
-  pause
-  exit /b 1
-)
-echo.
-echo ?????dist\AI????\AI????.exe
-pause
+call "%~dp0build_exe.bat"
