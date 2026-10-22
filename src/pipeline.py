@@ -13,7 +13,8 @@ from autogen_agentchat.messages import (TextMessage, ToolCallRequestEvent,
                                         ToolCallExecutionEvent, ThoughtEvent)
 from src.models import make_client
 from src.agents import build_agents
-from src.projects import current_workspace, current_usage_path
+from src.projects import current_workspace, current_usage_path, current_memory_path
+from src.memory import ProjectMemory
 from src.teams import build_team, build_stage
 from src.tools.code_exec import (code_tool, write_file_tool, list_files_tool,
                                  read_file_tool, hidden_subprocess_kwargs)
@@ -92,6 +93,8 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
                           inspect_tools=[list_files_tool, read_file_tool],
                           tracker=usage)
     ws = _init_workspace()
+    memory = ProjectMemory(current_memory_path())
+    memory.reset(requirement)
     store = UsageStore(current_usage_path())
     recorded = False
 
@@ -123,6 +126,7 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
                        done_text=ARCH_DONE, max_messages=2).run_stream(task=requirement),
             on_event)
         prd_text = _strip_markers(_last_text(r1.messages, "ProductManager"))
+        memory.set("prd", prd_text)
         emit_usage()
         if stopped():
             abort()
@@ -135,15 +139,15 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
             return
 
         # 阶段三：架构师 -> 架构
+        memory.set("leader_answers", answers or "按默认假设执行")
         on_event("stage", "", "阶段三：架构设计")
         r3 = await _consume(
             build_team([agents["arch"]], selector_llm, "roundrobin",
                        done_text=ARCH_DONE, max_messages=2).run_stream(
-                task=f"以下是产品经理的 PRD：\n{prd_text}\n\n"
-                     f"Leader 对 PRD 问题的答复：{answers or '按默认假设执行'}\n\n"
-                     f"请据此输出完整架构设计文档。"),
+                task=f"{memory.context_for('arch')}\n\n请据此输出完整架构设计文档。"),
             on_event)
         arch_text = _strip_markers(_last_text(r3.messages, "Architect"))
+        memory.set("architecture", arch_text)
         emit_usage()
         if stopped():
             abort()
@@ -159,46 +163,48 @@ async def run_pipeline(requirement: str, mode: str = "roundrobin",
             on_event("done", "", ws)
             return
 
-        handoff = (f"【PRD】\n{prd_text}\n\n"
-                   f"【Leader 答复】\n{answers or '按默认假设执行'}\n\n"
-                   f"【架构设计（已批准）】\n{arch_text}")
-        base = f"{handoff}\n\n工作目录：{ws}"
 
         # 阶段五：串行 后端 -> 前端 -> 评审 -> QA
         if stopped():
             abort()
             return
         r_be = await _consume(build_stage(agents["backend"]).run_stream(
-            task=f"{base}\n\n你是后端开发。不要探测环境，直接完成交付："
+            task=f"{memory.context_for('backend')}\n\n工作目录：{ws}\n\n"
+                 f"你是后端开发。不要探测环境，直接完成交付："
                  f"若需后端代码用 write_file 写入工作目录；若无需后端，一句话说明即可。"), on_event)
         be_out = _last_text(r_be.messages, "BackendDev")
+        memory.set("backend", be_out)
         emit_usage()
         if stopped():
             abort()
             return
 
         r_fe = await _consume(build_stage(agents["frontend"]).run_stream(
-            task=f"{base}\n\n后端交付：\n{be_out}\n\n"
+            task=f"{memory.context_for('frontend')}\n\n工作目录：{ws}\n\n"
                  f"你是前端开发。用 write_file 把前端代码写入工作目录（文件名按架构要求），"
                  f"完成后用 list_files 确认。"), on_event)
         fe_out = _last_text(r_fe.messages, "FrontendDev")
+        memory.set("frontend", fe_out)
         emit_usage()
         if stopped():
             abort()
             return
 
         r_rv = await _consume(build_stage(agents["reviewer"]).run_stream(
-            task=f"{base}\n\n后端交付：\n{be_out}\n\n前端交付：\n{fe_out}\n\n"
+            task=f"{memory.context_for('reviewer')}\n\n工作目录：{ws}\n\n"
                  f"你是评审。用 list_files / read_file 查看工作目录代码，输出评审意见（通过/需要修改）。"), on_event)
         rv_out = _last_text(r_rv.messages, "Reviewer")
+        memory.set("review", rv_out)
         emit_usage()
         if stopped():
             abort()
             return
 
-        await _consume(build_stage(agents["qa"]).run_stream(
-            task=f"{base}\n\n评审意见：\n{rv_out}\n\n"
+        r_qa = await _consume(build_stage(agents["qa"]).run_stream(
+            task=f"{memory.context_for('qa')}\n\n工作目录：{ws}\n\n"
                  f"你是QA。用 list_files / read_file / run_cmd 对工作目录代码做测试，输出测试报告。"), on_event)
+        qa_out = _last_text(r_qa.messages, "QA")
+        memory.set("qa", qa_out)
         emit_usage()
         if stopped():
             abort()
@@ -218,12 +224,13 @@ async def run_direct(role_key: str, instruction: str, history_text: str = "",
     on_event = on_event or (lambda *a, **k: None)
     usage = usage or UsageTracker()
     store = UsageStore(current_usage_path())
+    memory = ProjectMemory(current_memory_path())
     agents = build_agents(dev_tools=[code_tool, write_file_tool],
                           inspect_tools=[list_files_tool, read_file_tool],
                           tracker=usage)
     agent = agents[role_key]
-    task = ("以下是团队群聊近期记录，供你理解上下文：\n"
-            f"{history_text or '（暂无）'}\n\n"
+    base = memory.context_for(role_key)
+    task = (f"{base}\n\n近期群聊：\n{history_text or '（暂无）'}\n\n"
             f"Leader 单独给你下达指令：{instruction}\n\n"
             "请直接回应并执行该指令。")
     try:

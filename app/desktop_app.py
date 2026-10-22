@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QLabel, QLineEdit, QPushButton,
     QScrollArea, QFrame, QSizePolicy, QToolButton, QDialog, QFormLayout,
     QDialogButtonBox, QComboBox, QTabWidget, QGroupBox, QCheckBox,
-    QInputDialog, QMessageBox,
+    QInputDialog, QMessageBox, QTextBrowser, QTextEdit,
 )
 import yaml
 
@@ -33,7 +33,8 @@ from src.paths import app_root, CONFIG_DIR
 from src.models import role_override, save_model_cfg
 from src.projects import (list_projects, current_project, current_workspace,
                           create_project, select_project, current_session_path,
-                          current_usage_path)
+                          current_usage_path, current_memory_path)
+from src.memory import ProjectMemory
 from src.usage import UsageStore
 
 AGENTS = [
@@ -315,6 +316,11 @@ class MainWindow(QMainWindow):
         self.cost_btn.setObjectName("ghost")
         self.cost_btn.clicked.connect(self._show_usage)
         sv.addWidget(self.cost_btn)
+
+        self.memory_btn = QPushButton("🧠 项目记忆")
+        self.memory_btn.setObjectName("ghost")
+        self.memory_btn.clicked.connect(self._show_memory)
+        sv.addWidget(self.memory_btn)
         root.addWidget(side)
 
         # 右侧
@@ -415,6 +421,34 @@ class MainWindow(QMainWindow):
             if w is not None:
                 w.deleteLater()
 
+    def _markdown_body(self, text):
+        view = QTextBrowser()
+        view.setReadOnly(True)
+        view.setOpenExternalLinks(True)
+        view.setFrameShape(QFrame.NoFrame)
+        view.setStyleSheet(
+            "QTextBrowser{background:transparent;border:none;color:#e6e6e6;}"
+            "QTextBrowser QScrollBar{width:0;height:0;}")
+        view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        view.setLineWrapMode(QTextEdit.WidgetWidth)
+        view.document().setDefaultStyleSheet(
+            "pre{background:#0d1117;color:#d8e1ee;padding:8px;border-radius:6px;}"
+            "code{background:#0d1117;color:#d8e1ee;}")
+        view.setMarkdown(text)
+        view.document().setTextWidth(760)
+        view.setFixedHeight(int(view.document().size().height()) + 8)
+        QTimer.singleShot(0, lambda v=view: self._fit_markdown(v))
+        return view
+
+    def _fit_markdown(self, view):
+        try:
+            width = max(240, view.viewport().width())
+            view.document().setTextWidth(width)
+            view.setFixedHeight(int(view.document().size().height()) + 8)
+        except Exception:
+            pass
+
     def _make_message(self, msg):
         kind, source, text = msg["kind"], msg["source"], msg["text"]
         if kind == "stage":
@@ -465,10 +499,7 @@ class MainWindow(QMainWindow):
         name_lbl = QLabel(name)
         name_lbl.setStyleSheet(
             "color:#bcd4ff;font-weight:bold;" if is_user else "color:#7fb3ff;font-weight:bold;")
-        body = QLabel(text)
-        body.setWordWrap(True)
-        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        body.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        body = self._markdown_body(text)
         v.addWidget(name_lbl)
         v.addWidget(body)
 
@@ -623,6 +654,32 @@ class MainWindow(QMainWindow):
                     f"  {r.get('time', '')} · {r.get('mode', '')} · "
                     f"{r.get('total_tokens', 0)} tokens · {r.get('label', '')[:40]}")
         QMessageBox.information(self, "用量详情", "\n".join(lines))
+
+    def _show_memory(self):
+        try:
+            mem = ProjectMemory(current_memory_path())
+            text = mem.summary_text()
+        except Exception:
+            text = ""
+        if not text.strip():
+            QMessageBox.information(self, "项目记忆", "当前项目还没有记忆，先跑一次流水线。")
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🧠 项目记忆")
+        dlg.resize(860, 680)
+        lay = QVBoxLayout(dlg)
+        view = QTextBrowser()
+        view.setOpenExternalLinks(True)
+        view.document().setDefaultStyleSheet(
+            "pre{background:#0d1117;color:#d8e1ee;padding:8px;border-radius:6px;}"
+            "code{background:#0d1117;color:#d8e1ee;}")
+        view.setMarkdown(text)
+        lay.addWidget(view)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        lay.addWidget(buttons)
+        dlg.exec()
 
     def _open_settings(self):
         if config_dialog(self, first_run=False):

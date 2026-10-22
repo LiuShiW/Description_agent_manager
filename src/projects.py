@@ -117,3 +117,7 @@ def select_project(name: str) -> dict:
             _save(data)
             return p
     raise ValueError("项目不存在")
+
+
+def current_memory_path() -> Path:
+    return current_project_root() / "memory.json"
