@@ -5,7 +5,7 @@ Thanks for your interest! This project is a local-first multi-agent software tea
 ## Development setup
 
 ```bash
-git clone https://github.com/liuMou-dot/Description_agent_manager.git
+git clone https://github.com/LiuShiW/Description_agent_manager.git
 cd Description_agent_manager
 python -m venv .venv
 # Windows: .venv\Scripts\activate

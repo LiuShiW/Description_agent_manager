@@ -28,25 +28,38 @@
 flowchart TD
     U[Leader / 你] --> UI[PySide6 桌面工作台]
     UI --> P[Pipeline 编排]
+
     P --> PM[产品经理]
-    PM -->|PRD + 问题| U
-    PM --> AR[架构师]
-    AR -->|架构审批| U
-    AR --> BE[后端开发]
-    BE --> FE[前端开发]
-    FE --> RV[代码评审]
-    RV --> QA[QA 测试]
-    BE --> T[工具层]
+    PM -->|PRD| AR[架构师]
+    AR -->|已批准架构| BE[后端开发]
+    BE -->|后端交付| FE[前端开发]
+    FE -->|前端交付| RV[代码评审]
+    RV -->|评审通过| QA[QA 测试]
+    QA -->|测试通过| D[交付]
+
+    PM -.问题.-> U
+    U -.答复.-> PM
+    AR -.架构审批.-> U
+    U -.批准/驳回.-> AR
+
+    BE --> T[工具层：write_file / run_cmd]
     FE --> T
     QA --> T
+    RV --> R[只读工具：list_files / read_file]
     T --> WS[(workspace + Git 快照)]
-    P --> M[DeepSeek / Kimi API BYOK]
+    R --> WS
+
+    P -.调度.-> M[模型 API · BYOK]
 ```
+
+**交付顺序**：产品经理 → 架构师（Leader 审批）→ 后端 → 前端 → 代码评审 → QA → 交付。
+
+> 工具层是开发/测试的执行手段，不是流程终点。后端交付后必须经过前端、代码评审与 QA；评审和 QA 通过后才算交付。
 
 ## 🚀 快速开始（源码运行）
 
 ```bash
-git clone https://github.com/liuMou-dot/Description_agent_manager.git
+git clone https://github.com/LiuShiW/Description_agent_manager.git
 cd Description_agent_manager
 python -m venv .venv
 # Windows: .venv\Scripts\activate
