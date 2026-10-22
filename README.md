@@ -91,6 +91,16 @@ roles:
 - DeepSeek OpenAI 兼容端点：`https://api.deepseek.com/v1`
 - 若以后接 Claude Code：Anthropic 兼容端点是 `https://api.deepseek.com/anthropic`（注意不是 `/v1`）
 
+## 💰 成本与用量
+
+- 费用按**当前实际使用的模型**计价，价格表在 `config/models.yaml` 的 `pricing` 中配置。
+- 未配置价格的模型会显示「价格未配置」，**不会**套用 DeepSeek 或其他模型的价格。
+- 用量按**项目**持久化：
+  - 默认项目：应用根目录 `usage.json`
+  - 新项目：`projects/<名称>/usage.json`
+- 每次运行/对话作为一条 `run` 记录，项目累计为所有 run 之和；成本详情可查看最近运行。
+- `budget_cny` 是单次运行预算上限，超出后自动停止。
+
 ## 📦 打包 Windows 可执行程序
 
 ```bash

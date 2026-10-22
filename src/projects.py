@@ -1,4 +1,10 @@
-"""多项目管理：每个项目有独立工作目录与会话文件。"""
+"""多项目管理：每个项目有独立工作目录、会话与用量文件。
+
+项目结构：
+- 默认项目：root = app_root()，workspace = app_root()/workspace
+- 新项目：  root = app_root()/projects/<名称>，workspace = root/workspace
+- session.json / usage.json 放在项目 root 下
+"""
 import json
 import re
 from pathlib import Path
@@ -33,12 +39,14 @@ def _sanitize(name: str) -> str:
 
 
 def ensure_default() -> dict:
-    """首次运行时创建默认项目，指向原来的 workspace。"""
     data = _load()
     if not data["items"]:
-        default_path = app_root() / "workspace"
-        default_path.mkdir(parents=True, exist_ok=True)
-        data["items"].append({"name": "默认项目", "path": str(default_path)})
+        root = app_root()
+        workspace = root / "workspace"
+        workspace.mkdir(parents=True, exist_ok=True)
+        data["items"].append({
+            "name": "默认项目", "root": str(root), "path": str(workspace),
+        })
         data["current"] = "默认项目"
         _save(data)
     if not data.get("current") or not any(
@@ -61,14 +69,29 @@ def current_project() -> dict:
     return data["items"][0]
 
 
+def current_project_root() -> Path:
+    p = current_project()
+    root = p.get("root")
+    if root:
+        return Path(root)
+    if p.get("name") == "默认项目":
+        return app_root()
+    return Path(p["path"]).parent
+
+
 def current_workspace() -> Path:
-    p = Path(current_project()["path"])
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    p = current_project()
+    ws = Path(p["path"])
+    ws.mkdir(parents=True, exist_ok=True)
+    return ws
 
 
 def current_session_path() -> Path:
-    return current_workspace().parent / "session.json"
+    return current_project_root() / "session.json"
+
+
+def current_usage_path() -> Path:
+    return current_project_root() / "usage.json"
 
 
 def create_project(name: str) -> dict:
@@ -76,9 +99,10 @@ def create_project(name: str) -> dict:
     name = _sanitize(name)
     if any(p.get("name") == name for p in data["items"]):
         raise ValueError("项目已存在")
-    path = PROJECTS_ROOT / name
-    path.mkdir(parents=True, exist_ok=True)
-    item = {"name": name, "path": str(path)}
+    root = PROJECTS_ROOT / name
+    workspace = root / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    item = {"name": name, "root": str(root), "path": str(workspace)}
     data["items"].append(item)
     data["current"] = name
     _save(data)

@@ -9,7 +9,8 @@ default:
 # 单次运行预算上限（元），0 = 不限
 budget_cny: 0
 
-# 可选：覆盖默认价格（元 / 百万 token）
+# 价格表（元 / 百万 token），按模型名称匹配当前实际使用的模型。
+# 未列出的模型会显示「价格未配置」，不会套用其他模型的价格。
 pricing:
   deepseek-flash:
     input: 1.0
@@ -17,6 +18,10 @@ pricing:
   deepseek-v4-pro:
     input: 3.0
     output: 6.0
+  # 其他模型请按官方价格填写，例如：
+  # kimi-k3:
+  #   input: 0.0
+  #   output: 0.0
 
 # 可选：按角色单独配置。未填写的字段回落到 default。
 roles:

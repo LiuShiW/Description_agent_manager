@@ -32,7 +32,9 @@ from src.pipeline import run_pipeline, run_direct
 from src.paths import app_root, CONFIG_DIR
 from src.models import role_override, save_model_cfg
 from src.projects import (list_projects, current_project, current_workspace,
-                          create_project, select_project, current_session_path)
+                          create_project, select_project, current_session_path,
+                          current_usage_path)
+from src.usage import UsageStore
 
 AGENTS = [
     ("pm", "产品经理", "🧑‍💼"),
@@ -204,6 +206,7 @@ class MainWindow(QMainWindow):
         self.pending = None
         self.dm_running = set()
         self.usage = {}
+        self.project_usage = self._load_project_usage()
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -216,6 +219,16 @@ class MainWindow(QMainWindow):
         self.timer.start(200)
 
     # ---------- 持久化 ----------
+    def _load_project_usage(self):
+        try:
+            return UsageStore(current_usage_path()).load()
+        except Exception:
+            return {"total": {}, "runs": []}
+
+    def _reload_project_usage(self):
+        self.project_usage = self._load_project_usage()
+        self._refresh_header()
+
     def _load_session(self):
         try:
             if self.session_path.exists():
@@ -360,10 +373,12 @@ class MainWindow(QMainWindow):
             return
         self.session_path = current_session_path()
         self.log = self._load_session()
+        self.project_usage = self._load_project_usage()
         self.pending = None
         self.running = False
         self.dm_running = set()
         self.usage = {}
+        self.project_usage = self._load_project_usage()
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -566,12 +581,19 @@ class MainWindow(QMainWindow):
         self.status.setText(f"状态：{s}")
         self.stop_btn.setEnabled(self.running)
         u = self.usage or {}
-        total = int(u.get("total_input", 0)) + int(u.get("total_output", 0))
-        cost = float(u.get("total_cost", 0) or 0)
+        pu = (self.project_usage or {}).get("total", {}) or {}
+
+        def _fmt(x):
+            total = int(x.get("total_input", 0)) + int(x.get("total_output", 0))
+            cost = float(x.get("total_cost", 0) or 0)
+            return f"{total} tokens · ¥{cost:.4f}"
+
+        text = f"本次：{_fmt(u)}\n项目累计：{_fmt(pu)}"
         budget = float(u.get("budget_cny", 0) or 0)
-        text = f"本次：{total} tokens · ¥{cost:.4f}"
         if budget > 0:
             text += f" / 预算 ¥{budget:.2f}"
+        if not u.get("cost_known", True) or not pu.get("cost_known", True):
+            text += "\n（部分模型未配置价格）"
         self.cost_label.setText(text)
 
     def _refresh(self):
@@ -589,19 +611,31 @@ class MainWindow(QMainWindow):
 
     def _show_usage(self):
         u = self.usage or {}
-        roles = u.get("roles") or []
-        if not roles:
-            QMessageBox.information(self, "成本详情", "本次还没有用量记录。")
-            return
-        lines = [f"总计：{u.get('total_input', 0)} 输入 / {u.get('total_output', 0)} 输出 · ¥{u.get('total_cost', 0):.4f}"]
-        if u.get("budget_cny", 0):
-            lines.append(f"预算：¥{u['budget_cny']:.2f}")
-        lines.append("")
-        for r in roles:
-            lines.append(
-                f"{r.get('role', '')} · {r.get('model', '')}："
-                f"{r.get('input', 0)} / {r.get('output', 0)} tokens · "
-                f"¥{r.get('cost', 0):.4f}（{r.get('calls', 0)} 次）")
+        pu = (self.project_usage or {}).get("total", {}) or {}
+        lines = ["【本次运行】"]
+        if u.get("roles"):
+            lines.append(f"总计：{u.get('total_input', 0)} 输入 / {u.get('total_output', 0)} 输出 · ¥{u.get('total_cost', 0):.4f}")
+            for r in u["roles"]:
+                cost = f"¥{r.get('cost', 0):.4f}" if r.get("known", True) else "价格未配置"
+                lines.append(
+                    f"  {r.get('role', '')} · {r.get('model', '')}："
+                    f"{r.get('input', 0)} / {r.get('output', 0)} tokens · "
+                    f"{cost}（{r.get('calls', 0)} 次）")
+            if not u.get("cost_known", True):
+                lines.append(f"  未配置价格的模型：{', '.join(u.get('unknown_models', []))}")
+        else:
+            lines.append("  暂无记录")
+
+        lines += ["", "【项目累计】",
+                  f"{pu.get('total_input', 0)} 输入 / {pu.get('total_output', 0)} 输出 · "
+                  f"¥{pu.get('total_cost', 0):.4f}（{pu.get('calls', 0)} 次调用）"]
+        runs = (self.project_usage or {}).get("runs", [])
+        if runs:
+            lines += ["", "【最近运行】"]
+            for r in runs[-5:]:
+                lines.append(
+                    f"  {r.get('time', '')} · {r.get('mode', '')} · "
+                    f"¥{r.get('total_cost', 0):.4f} · {r.get('label', '')[:40]}")
         QMessageBox.information(self, "成本详情", "\n".join(lines))
 
     def _open_settings(self):
@@ -625,6 +659,7 @@ class MainWindow(QMainWindow):
         self.running = False
         self.dm_running = set()
         self.usage = {}
+        self.project_usage = self._load_project_usage()
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -647,6 +682,7 @@ class MainWindow(QMainWindow):
         self.pending = None
         self.running = True
         self.usage = {}
+        self.project_usage = self._load_project_usage()
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
@@ -724,9 +760,11 @@ class MainWindow(QMainWindow):
                 self.running = False
                 self.stop_event.clear()
                 self._save_session()
+                QTimer.singleShot(800, self._reload_project_usage)
             elif kind == "dm_done":
                 self.dm_running.discard(ev[1])
                 self._save_session()
+                self.project_usage = self._load_project_usage()
             elif kind == "usage":
                 try:
                     self.usage = json.loads(ev[2])
