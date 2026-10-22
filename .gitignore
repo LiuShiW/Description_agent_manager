@@ -36,3 +36,4 @@ projects.json
 # 本地启动脚本（不入库）
 启动桌面版.bat
 usage.json
+_dist_userdata_backup/

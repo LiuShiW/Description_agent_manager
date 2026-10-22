@@ -100,9 +100,12 @@ roles:
 
 ## 📦 打包 Windows 可执行程序
 
-```bash
-build_exe.bat
-```
+双击 `打包.bat`（或运行 `打包.bat`）。脚本会自动：
+
+1. 检查 `AI软件团队.exe` 是否在运行
+2. 备份 dist 里的 workspace、projects、session.json、usage.json
+3. 清理 dist 并执行 PyInstaller
+4. 恢复配置与用户数据
 
 产物：`dist/AI软件团队/AI软件团队.exe`（onedir，整个 `AI软件团队` 文件夹一起分发）。
 
@@ -126,7 +129,9 @@ build_exe.bat
 │   └── models.example.yaml # 模型配置模板
 ├── workspace/              # 运行时产出（不入库）
 ├── desktop_app.spec        # PyInstaller 配置
-└── build_exe.bat
+├── 打包.bat               # 一键打包（自动备份/恢复）
+├── build_exe.bat          # 别名
+└── scripts/build_exe.py   # 打包逻辑
 ```
 
 ## 🗺️ Roadmap
