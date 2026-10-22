@@ -1,8 +1,9 @@
 """CLI 入口（复用 src/pipeline.py）。
 
 用法：
-  python main.py "你的项目需求" --mode roundrobin
-  python main.py "你的项目需求" --mode selector
+  python main.py "你的项目需求"
+
+流水线会自动判断：纯后端 / 纯前端 / 前后端并行。
 """
 import argparse
 import asyncio
@@ -30,10 +31,8 @@ async def ask_cli(prompt, kind):
 async def main():
     ap = argparse.ArgumentParser(description="本地群聊式 AI 软件团队")
     ap.add_argument("requirement", nargs="+", help="原始项目需求")
-    ap.add_argument("--mode", default="roundrobin",
-                    choices=["roundrobin", "selector"], help="协作模式")
     args = ap.parse_args()
-    await run_pipeline(" ".join(args.requirement), args.mode, on_event, ask_cli)
+    await run_pipeline(" ".join(args.requirement), on_event, ask_cli)
 
 
 if __name__ == "__main__":

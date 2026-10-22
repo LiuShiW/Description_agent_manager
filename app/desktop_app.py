@@ -1,6 +1,6 @@
 """原生桌面工作台（PySide6）。
 
-- 左侧：群聊 + 6 角色、协作模式、设置、停止、新会话
+- 左侧：群聊 + 6 角色、设置、停止、新会话
 - 右侧：群聊/角色历史 + 底部输入
 - 需求直接提给产品经理；角色视图可单独下指令
 - 会话历史持久化到 session.json
@@ -281,12 +281,6 @@ class MainWindow(QMainWindow):
             self.sidebar.addItem(it)
         self.sidebar.currentRowChanged.connect(self._on_view_changed)
         sv.addWidget(self.sidebar, 1)
-
-        sv.addWidget(QLabel("协作模式"))
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("串行接力", "roundrobin")
-        self.mode_combo.addItem("自动协作（SOP 约束）", "selector")
-        sv.addWidget(self.mode_combo)
 
         self.settings_btn = QPushButton("⚙ 设置")
         self.settings_btn.setObjectName("ghost")
@@ -729,9 +723,8 @@ class MainWindow(QMainWindow):
         self.stop_event = threading.Event()
         self.event_q = queue.Queue()
         self.answer_q = queue.Queue()
-        mode = self.mode_combo.currentData() or "roundrobin"
         threading.Thread(target=self._pipeline_worker,
-                         args=(req, mode, self.event_q, self.answer_q, self.stop_event),
+                         args=(req, self.event_q, self.answer_q, self.stop_event),
                          daemon=True).start()
         self._save_session()
         self._refresh()
@@ -766,7 +759,7 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     # ---------- 后台线程 ----------
-    def _pipeline_worker(self, req, mode, event_q, answer_q, stop_event):
+    def _pipeline_worker(self, req, event_q, answer_q, stop_event):
         def on_event(kind, source, text):
             event_q.put((kind, source, text))
 
@@ -775,7 +768,7 @@ class MainWindow(QMainWindow):
             return await asyncio.to_thread(answer_q.get)
 
         try:
-            asyncio.run(run_pipeline(req, mode, on_event, ask, stop_event=stop_event))
+            asyncio.run(run_pipeline(req, on_event, ask, stop_event=stop_event))
         except Exception as e:
             event_q.put(("error", "", f"{type(e).__name__}: {e}"))
         finally:

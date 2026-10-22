@@ -55,7 +55,7 @@ class ProjectMemory:
     def get(self, key: str) -> str:
         return self.data.get(key, "") or ""
 
-    def context_for(self, role: str) -> str:
+    def context_for(self, role: str, parallel: bool = False) -> str:
         """按角色返回所需上下文，避免把全量交付物塞给每个模型。"""
         parts = []
 
@@ -75,7 +75,8 @@ class ProjectMemory:
         elif role == "frontend":
             add("PRD", "prd")
             add("架构设计", "architecture")
-            add("后端交付", "backend")
+            if not parallel:
+                add("后端交付", "backend")
         elif role == "reviewer":
             add("架构设计", "architecture")
             add("后端交付", "backend")

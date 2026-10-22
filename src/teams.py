@@ -1,5 +1,5 @@
 """群聊与单代理阶段的构建与终止条件。"""
-from autogen_agentchat.teams import RoundRobinGroupChat, SelectorGroupChat
+from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
 from autogen_agentchat.base import TerminationCondition
 from autogen_agentchat.messages import StopMessage, TextMessage
@@ -31,9 +31,8 @@ class StopAfterText(TerminationCondition):
 
 
 def build_team(participants, llm, mode="roundrobin", done_text="交付完成", max_messages=300):
+    """固定使用串行群聊；mode 参数保留仅为兼容旧调用。"""
     done = TextMentionTermination(done_text) | MaxMessageTermination(max_messages)
-    if mode == "selector":
-        return SelectorGroupChat(participants, model_client=llm, termination_condition=done)
     return RoundRobinGroupChat(participants, termination_condition=done)
 
 

@@ -52,7 +52,7 @@ def _init_state():
         st.session_state.answer_q = queue.Queue()
 
 
-def _worker(req, mode, event_q, answer_q):
+def _worker(req, event_q, answer_q):
     def on_event(kind, source, text):
         event_q.put((kind, source, text))
 
@@ -61,7 +61,7 @@ def _worker(req, mode, event_q, answer_q):
         return await asyncio.to_thread(answer_q.get)
 
     try:
-        asyncio.run(run_pipeline(req, mode, on_event, ask))
+        asyncio.run(run_pipeline(req, on_event, ask))
     except Exception as e:
         event_q.put(("error", "", f"{type(e).__name__}: {e}"))
     finally:
@@ -176,9 +176,6 @@ with st.sidebar:
         idx = 0
     st.session_state.view = st.radio("视图", options, index=idx,
                                      format_func=lambda x: labels[x])
-    mode = st.radio("协作模式", ["roundrobin", "selector"],
-                    format_func=lambda m: "串行接力" if m == "roundrobin" else "自动协作（SOP 约束）",
-                    horizontal=True)
     st.divider()
     if st.session_state.running:
         status = "🟢 流水线运行中"
@@ -262,7 +259,7 @@ elif st.session_state.view == "group":
             _eq, _aq = queue.Queue(), queue.Queue()
             st.session_state.event_q = _eq
             st.session_state.answer_q = _aq
-            threading.Thread(target=_worker, args=(req, mode, _eq, _aq), daemon=True).start()
+            threading.Thread(target=_worker, args=(req, _eq, _aq), daemon=True).start()
             st.rerun()
 else:
     role = st.session_state.view
