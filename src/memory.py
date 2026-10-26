@@ -1,4 +1,4 @@
-"""项目记忆：保存各阶段产出，并按角色裁剪上下文。
+"""项目记忆：保存各阶段产出，并按角色构建上下文（超长字段走 RAG 检索）。
 
 memory.json（项目根）：
 {
@@ -14,6 +14,8 @@ from pathlib import Path
 FIELDS = ("requirement", "prd", "leader_answers", "architecture",
           "backend", "frontend", "review", "qa")
 MAX_FIELD_CHARS = 12000
+RAG_THRESHOLD = 3000   # 超过此长度的字段改走 RAG 检索，不再截断
+RAG_TOP_K = 4          # 每个角色检索保留的相关片段数
 
 
 def _clip(text: str, limit: int = MAX_FIELD_CHARS) -> str:
@@ -56,40 +58,61 @@ class ProjectMemory:
         return self.data.get(key, "") or ""
 
     def context_for(self, role: str, parallel: bool = False) -> str:
-        """按角色返回所需上下文，避免把全量交付物塞给每个模型。"""
-        parts = []
-
-        def add(title: str, key: str):
-            value = self.get(key)
-            if value.strip():
-                parts.append(f"【{title}】\n{_clip(value)}")
-
+        """按角色返回所需上下文；超长字段用 RAG 检索替代截断。"""
+        titles = {
+            "requirement": "原始需求", "prd": "PRD",
+            "leader_answers": "Leader 答复", "architecture": "架构设计",
+            "backend": "后端交付", "frontend": "前端交付",
+            "review": "评审意见", "qa": "QA 报告",
+        }
         if role == "arch":
-            add("原始需求", "requirement")
-            add("PRD", "prd")
-            add("Leader 答复", "leader_answers")
+            fields = ["requirement", "prd", "leader_answers"]
         elif role == "backend":
-            add("PRD", "prd")
-            add("Leader 答复", "leader_answers")
-            add("架构设计", "architecture")
+            fields = ["prd", "leader_answers", "architecture"]
         elif role == "frontend":
-            add("PRD", "prd")
-            add("架构设计", "architecture")
-            if not parallel:
-                add("后端交付", "backend")
+            fields = ["prd", "architecture"] + ([] if parallel else ["backend"])
         elif role == "reviewer":
-            add("架构设计", "architecture")
-            add("后端交付", "backend")
-            add("前端交付", "frontend")
+            fields = ["architecture", "backend", "frontend"]
         elif role == "qa":
-            add("PRD", "prd")
-            add("架构设计", "architecture")
-            add("评审意见", "review")
+            fields = ["prd", "architecture", "review"]
         else:
-            add("原始需求", "requirement")
-            add("PRD", "prd")
+            fields = ["requirement", "prd"]
+
+        parts: list[str] = []
+        long_docs: dict[str, str] = {}
+
+        for key in fields:
+            value = self.get(key)
+            if not value.strip():
+                continue
+            title = titles[key]
+            if len(value) <= RAG_THRESHOLD:
+                parts.append(f"【{title}】\n{value}")
+            else:
+                long_docs[title] = value
+
+        if long_docs:
+            parts.append(self._retrieve_sections(long_docs, fields))
 
         return "\n\n".join(parts)
+
+    def _retrieve_sections(self, long_docs: dict[str, str],
+                           fields: list[str]) -> str:
+        """对超长字段做切片 + 语义检索，返回最相关片段。"""
+        try:
+            from src.rag import MemoryRetriever
+            retriever = MemoryRetriever(persist_dir=str(self.path.parent / ".rag_store"))
+            retriever.index(long_docs)
+            query = self.get("requirement") or " ".join(fields)
+            hits = retriever.retrieve(query, top_k=RAG_TOP_K)
+            if hits:
+                return "【知识片段（RAG 检索）】\n" + "\n\n".join(hits)
+        except Exception:
+            pass
+        # 检索失败则退回截断，保证不崩
+        return "\n\n".join(
+            f"【{title}】\n{_clip(value)}" for title, value in long_docs.items()
+        )
 
     def summary_text(self) -> str:
         titles = {

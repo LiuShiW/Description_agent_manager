@@ -4,7 +4,9 @@ from PyInstaller.utils.hooks import collect_all
 
 datas, binaries, hiddenimports = [], [], []
 for pkg in ["autogen_agentchat", "autogen_ext", "autogen_core", "openai",
-            "yaml", "pydantic", "tiktoken"]:
+            "yaml", "pydantic", "tiktoken",
+            "pymilvus", "milvus_lite",        # RAG 向量库（Milvus Lite 嵌入式）
+            "fastembed", "onnxruntime"]:       # RAG 语义向量（可选，装了才收集）
     try:
         d, b, h = collect_all(pkg)
         datas += d

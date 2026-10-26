@@ -38,3 +38,8 @@ projects.json
 usage.json
 _dist_userdata_backup/
 memory.json
+
+# HF/fastembed 缓存误建
+~
+.rag_store/
+

@@ -7,3 +7,8 @@ pyyaml
 PySide6
 # 网页原型（保留）
 streamlit
+# RAG 向量数据库（Milvus Lite，嵌入式）
+pymilvus
+milvus-lite
+# RAG 语义向量（可选）：fastembed（bge-small-zh）；不装则自动降级为 TF-IDF 关键词检索
+# fastembed
