@@ -22,6 +22,8 @@
 - 自动判断：纯后端 / 纯前端 / 前后端并行
 - Agent 真的读写本地文件、执行命令、跑测试，不是只给代码片段
 - 项目记忆 `memory.json`、会话 `session.json`、Token 用量 `usage.json`
+- **RAG 检索式上下文**（Milvus + bge-small-zh），长项目不再靠截断
+- **双模式**：标准开发流程 / 群聊协作（TechLead 自动判断，自动 @ 转交）
 - 多项目、独立工作目录、停止运行、会话恢复
 - Markdown / 代码块渲染
 - 用自己的 API Key（DeepSeek / Kimi），只付 token
@@ -53,8 +55,7 @@ flowchart TD
 ## 现在还不能做什么 / 已知问题
 
 - **不是沙箱**：本机 `subprocess` + 命令白名单 + Git 快照，别在不可信环境跑
-- **长项目上下文会膨胀**：`memory.json` 单字段超过 12000 字符会截断
-- **项目类型判断不完美**：优先读架构里的“项目类型”，没有就用关键词兜底，可能判断错
+- **项目类型判断**：优先读架构里的结构化声明，声明缺失才用关键词启发式兜底（会提示低置信度）
 - **UI 比较朴素**：还没做安装包、代码签名、自动更新
 - **模型覆盖有限**：目前主要用 DeepSeek / Kimi 的 OpenAI 兼容接口，其他模型没充分测
 - **测试脚本不保留**：QA 完成后会自动删除 `tests/`、`qa/` 和根目录测试文件
@@ -120,6 +121,8 @@ roles:
 | 模型 | DeepSeek / Kimi（BYOK，OpenAI 兼容接口） |
 | 代码执行 | 本机 subprocess + 命令白名单 + Git 快照 |
 | 记忆 | 项目级 `memory.json` + `session.json` |
+| 检索 | Milvus Lite（pymilvus + milvus-lite）+ bge-small-zh（fastembed） |
+| 协作 | AutoGen Swarm（handoff）：群聊协作模式 |
 | 用量 | 项目级 `usage.json`（只统计 token） |
 
 ## 项目结构
@@ -131,7 +134,8 @@ roles:
 ├── src/
 │   ├── pipeline.py         # 流水线与项目类型判断
 │   ├── agents.py           # 6 角色定义
-│   ├── memory.py           # 项目记忆与按角色上下文
+│   ├── memory.py           # 项目记忆与 RAG 检索式上下文
+│   ├── rag.py              # 切片 + embedding + Milvus 向量检索
 │   ├── projects.py         # 多项目 / 工作目录
 │   ├── usage.py            # Token 统计
 │   ├── models.py           # 模型客户端工厂
@@ -139,6 +143,7 @@ roles:
 ├── config/
 │   ├── agents.yaml         # 6 角色提示词
 │   └── models.example.yaml # 模型配置模板
+├── AGENTS.md               # 工程规约（可判定硬规则）
 ├── workspace/              # 运行时产出（不入库）
 ├── build_exe.bat           # 一键打包（自动备份/恢复）
 └── scripts/build_exe.py
