@@ -22,7 +22,7 @@
 - 自动判断：纯后端 / 纯前端 / 前后端并行
 - Agent 真的读写本地文件、执行命令、跑测试，不是只给代码片段
 - 项目记忆 `memory.json`、会话 `session.json`、Token 用量 `usage.json`
-- **RAG 检索式上下文**（Milvus + bge-small-zh），长项目不再靠截断
+- **RAG 检索式上下文**（Milvus Lite；装了 fastembed 用 bge-small-zh 语义向量，否则降级关键词检索），长项目不再靠截断
 - **双模式**：标准开发流程 / 群聊协作（TechLead 自动判断，自动 @ 转交）
 - 多项目、独立工作目录、停止运行、会话恢复
 - Markdown / 代码块渲染
@@ -62,31 +62,66 @@ flowchart TD
 
 ## 快速开始
 
-### 下载 exe
+> 目前**没有提供现成的安装包 / Release**，两种方式：直接用源码跑，或自己打包成 exe。
 
-1. 下载 Release 里的 `AI软件团队` 压缩包
-2. 解压后双击 `AI软件团队.exe`
-3. 首次启动填入 API Key
-4. 输入需求 → 回答产品经理的问题 → 审批架构
+### 前置条件
 
-### 源码运行
+- Python 3.10+（开发环境是 3.12）
+- Git（Agent 执行命令时会用它做快照）
+- 一个 OpenAI 兼容的模型 Key（DeepSeek / Kimi）
+
+### 方式一：源码运行（推荐）
 
 ```bash
 git clone https://github.com/LiuShiW/Description_agent_manager.git
 cd Description_agent_manager
+
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+# Windows CMD:          .venv\Scripts\activate
+# Windows PowerShell:   .venv\Scripts\Activate.ps1
+# macOS / Linux:        source .venv/bin/activate
+
 pip install -r requirements.txt
 python app/desktop_app.py
 ```
 
-打包 Windows exe：
+首次启动会自动从 `config/models.example.yaml` 复制出 `config/models.yaml`，在「⚙ 设置」里填 API Key 就能用。
+
+**可选：开启语义检索**
+
+`requirements.txt` 里的 `fastembed` 是注释掉的（带 onnxruntime，体积较大）。装上会启用 bge-small-zh 语义向量；不装则自动降级成 TF-IDF 关键词检索，功能不受影响：
+
+```bash
+pip install fastembed
+```
+
+### 方式二：CLI（固定流程，不自动分流）
+
+```bash
+python main.py "做一个待办应用"
+```
+
+CLI 走的是标准开发流程，需要你在终端里回答产品经理的问题、输入 `y` 审批架构。桌面端才是自动判断「标准流程 / 群聊协作」的入口。
+
+### 方式三：网页原型（保留，非主入口）
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+### 自己打包 Windows exe
 
 ```bash
 build_exe.bat
 ```
 
-产物：`dist/AI软件团队/AI软件团队.exe`。
+脚本会自动安装 PyInstaller、备份并恢复 `workspace/` 与用户配置、清理旧的 `dist`，产物在 `dist/AI软件团队/AI软件团队.exe`（onedir，整个目录一起分发）。
+
+打包后可以跑一次冒烟测试，退出码 0 表示能正常启动：
+
+```bash
+"dist/AI软件团队/AI软件团队.exe" --smoke-test
+```
 
 ## 配置
 
@@ -132,8 +167,9 @@ roles:
 │   ├── desktop_app.py      # 原生桌面工作台（主入口）
 │   └── streamlit_app.py    # 网页原型
 ├── src/
-│   ├── pipeline.py         # 流水线与项目类型判断
-│   ├── agents.py           # 6 角色定义
+│   ├── pipeline.py         # 流水线 / 项目类型判断 / 群聊协作 / 统一入口
+│   ├── swarm_team.py       # Swarm 团队 + LoopGuard 防循环
+│   ├── agents.py           # 6 角色定义 + handoff 目标
 │   ├── memory.py           # 项目记忆与 RAG 检索式上下文
 │   ├── rag.py              # 切片 + embedding + Milvus 向量检索
 │   ├── projects.py         # 多项目 / 工作目录
@@ -148,14 +184,6 @@ roles:
 ├── build_exe.bat           # 一键打包（自动备份/恢复）
 └── scripts/build_exe.py
 ```
-
-## 开发记录（踩过的坑）
-
-- **群聊自由发言不收敛**：Selector 模式会互相空转，后来改成串行单阶段
-- **终止标记被任务文本误触发**：任务里写了「交付完成」，阶段一开始就结束；现在任务文本不再出现标记
-- **PyInstaller 打包 PySide6 报 ICU DLL 找不到**：PyArrow 的 ICU 抢占了系统 ICU，打包时过滤掉
-- **不同 Agent 不同模型时上下文没法共享**：只能显式交接，所以加了 `memory.json` 按角色裁剪
-- **QA 产出测试脚本后不想留一堆文件**：QA 完成后自动清理
 
 ## License
 
