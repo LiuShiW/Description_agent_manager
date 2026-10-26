@@ -2,7 +2,7 @@
 
 - 左侧：群聊 + 6 角色、设置、停止、新会话
 - 右侧：群聊/角色历史 + 底部输入
-- 需求直接提给产品经理；角色视图可单独下指令
+- 输入需求或问题，自动分派给团队（标准流程 / 群聊协作）；角色视图可单独下指令
 - 会话历史持久化到 session.json
 """
 import asyncio
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 import yaml
 
-from src.pipeline import run_pipeline, run_direct
+from src.pipeline import run_pipeline, run_direct, run_auto
 from src.paths import app_root, CONFIG_DIR
 from src.models import role_override, save_model_cfg
 from src.projects import (list_projects, current_project, current_workspace,
@@ -58,17 +58,28 @@ QListWidget { background: #151922; border: none; padding: 6px; outline: none; }
 QListWidget::item { padding: 10px 12px; border-radius: 8px; margin: 2px 0; }
 QListWidget::item:selected { background: #26324a; color: #ffffff; }
 QListWidget::item:hover { background: #1d2433; }
-QLineEdit, QComboBox { background: #1b202b; border: 1px solid #2b3446; border-radius: 8px;
-    padding: 8px 10px; color: #e6e6e6; }
-QPushButton { background: #2f6feb; color: white; border: none; border-radius: 8px;
-    padding: 8px 14px; font-weight: bold; }
+QLineEdit, QComboBox { background: #1b202b; border: 1px solid #2b3446; border-radius: 10px;
+    padding: 10px 14px; color: #e6e6e6; selection-background-color: #2f6feb; }
+QLineEdit:focus, QComboBox:focus { border: 1px solid #3b7bf5; background: #1d2433; }
+QPushButton { background: #2f6feb; color: white; border: none; border-radius: 10px;
+    padding: 10px 18px; font-weight: 600; font-size: 13px; }
 QPushButton:hover { background: #3b7bf5; }
+QPushButton:pressed { background: #275cc7; }
 QPushButton:disabled { background: #2a3040; color: #6b7488; }
 QPushButton#danger { background: #7a2f3a; }
 QPushButton#danger:hover { background: #933846; }
 QPushButton#ghost { background: #1b202b; border: 1px solid #2b3446; color: #c8d0dd; }
+QPushButton#ghost:hover { background: #222a38; }
 QScrollArea { border: none; background: #0f1115; }
 QToolButton { border: none; color: #8b95a7; text-align: left; }
+QWidget#inputHost { background: #131720; border-top: 1px solid #2b3446; }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 2px; }
+QScrollBar::handle:vertical { background: #2b3446; border-radius: 4px; min-height: 28px; }
+QScrollBar::handle:vertical:hover { background: #3d4c66; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QLabel#sideGroup { color: #5b6577; font-size: 11px; font-weight: 600; padding: 8px 4px 2px; }
+QLabel#statusBadge { border-radius: 10px; padding: 3px 10px; font-size: 11px; }
 """
 
 
@@ -256,10 +267,12 @@ class MainWindow(QMainWindow):
         sv.setContentsMargins(8, 10, 8, 10)
         sv.setSpacing(6)
         title = QLabel("👥 AI 软件团队")
-        title.setStyleSheet("font-size:15px;font-weight:bold;padding:4px;")
+        title.setStyleSheet("font-size:15px;font-weight:bold;padding:6px 4px;color:#e8ecf3;")
         sv.addWidget(title)
 
-        sv.addWidget(QLabel("项目"))
+        proj_lbl = QLabel("项目")
+        proj_lbl.setObjectName("sideGroup")
+        sv.addWidget(proj_lbl)
         self.project_combo = QComboBox()
         for p in list_projects():
             self.project_combo.addItem(p["name"])
@@ -325,10 +338,14 @@ class MainWindow(QMainWindow):
         root.addWidget(right, 1)
 
         self.title = QLabel("💬 群聊")
-        self.title.setStyleSheet("font-size: 20px; font-weight: bold;")
-        head = QVBoxLayout()
-        head.setSpacing(2)
+        self.title.setStyleSheet("font-size: 20px; font-weight: bold; color: #e8ecf3;")
+        self.header_status = QLabel("⚪ 空闲")
+        self.header_status.setObjectName("statusBadge")
+        head = QHBoxLayout()
+        head.setSpacing(10)
         head.addWidget(self.title)
+        head.addStretch(1)
+        head.addWidget(self.header_status)
         rlay.addLayout(head)
 
         self.scroll = QScrollArea()
@@ -341,9 +358,10 @@ class MainWindow(QMainWindow):
         rlay.addWidget(self.scroll, 1)
 
         self.input_host = QWidget()
+        self.input_host.setObjectName("inputHost")
         self.input_layout = QHBoxLayout(self.input_host)
-        self.input_layout.setContentsMargins(0, 0, 0, 0)
-        self.input_layout.setSpacing(8)
+        self.input_layout.setContentsMargins(12, 10, 12, 10)
+        self.input_layout.setSpacing(10)
         rlay.addWidget(self.input_host)
 
         self.sidebar.setCurrentRow(0)
@@ -484,8 +502,8 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setMaximumWidth(820)
         frame.setStyleSheet(
-            ("QFrame{background:#23406e;border-radius:10px;}"
-             if is_user else "QFrame{background:#1a1f2b;border-radius:10px;}")
+            ("QFrame{background:#23406e;border:1px solid #2f5a9e;border-radius:12px;}"
+             if is_user else "QFrame{background:#1a1f2b;border:1px solid #252b38;border-radius:12px;}")
             + "QLabel{background:transparent;}")
         v = QVBoxLayout(frame)
         v.setContentsMargins(12, 9, 12, 9)
@@ -497,13 +515,23 @@ class MainWindow(QMainWindow):
         v.addWidget(name_lbl)
         v.addWidget(body)
 
+        # 头像
+        avatar_emoji = "🧑" if is_user else AGENT_INFO.get(role, (source, "🤖"))[1]
+        avatar = QLabel(avatar_emoji)
+        avatar.setFixedSize(30, 30)
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setStyleSheet("background:#222a38;border-radius:15px;font-size:14px;")
+
         row = QWidget()
         h = QHBoxLayout(row)
-        h.setContentsMargins(0, 0, 0, 0)
+        h.setContentsMargins(0, 2, 0, 2)
+        h.setSpacing(8)
         if is_user:
             h.addStretch(1)
             h.addWidget(frame)
+            h.addWidget(avatar)
         else:
+            h.addWidget(avatar)
             h.addWidget(frame)
             h.addStretch(1)
         return row
@@ -512,7 +540,7 @@ class MainWindow(QMainWindow):
         self._clear_layout(self.chat_layout)
         msgs = self._visible()
         if not msgs:
-            tip = QLabel("在下方输入需求，直接提给产品经理。" if self.view == "group"
+            tip = QLabel("在下方输入需求或问题，团队会自动分派。" if self.view == "group"
                          else "该角色还没有发言。")
             tip.setStyleSheet("color:#697386; padding:20px;")
             tip.setAlignment(Qt.AlignCenter)
@@ -562,10 +590,10 @@ class MainWindow(QMainWindow):
                 self.input_layout.addWidget(QLabel("有角色正在单独回复，请稍候…"))
                 return
             self.req_edit = QLineEdit()
-            self.req_edit.setPlaceholderText("向产品经理提出需求…")
+            self.req_edit.setPlaceholderText("输入需求或问题，自动分派给团队…")
             self.req_edit.returnPressed.connect(self._submit_requirement)
             self.input_layout.addWidget(self.req_edit, 1)
-            btn = QPushButton("启动团队")
+            btn = QPushButton("发送")
             btn.clicked.connect(self._submit_requirement)
             self.input_layout.addWidget(btn)
         else:
@@ -589,14 +617,19 @@ class MainWindow(QMainWindow):
             name, emoji = AGENT_INFO[self.view]
             self.title.setText(f"{emoji} {name}")
         if self.running:
-            s = "🟢 流水线运行中"
+            s, bg, fg = "🟢 流水线运行中", "#12381f", "#4ade80"
         elif self.dm_running:
-            s = "💬 角色私聊中"
+            s, bg, fg = "💬 角色私聊中", "#1b2b4d", "#7fb3ff"
         elif self.pending:
-            s = "⏸ 等待你决定"
+            s, bg, fg = "⏸ 等待你决定", "#3a2f12", "#fbbf24"
         else:
-            s = "⚪ 空闲"
+            s, bg, fg = "⚪ 空闲", "#1b202b", "#8b95a7"
         self.status.setText(f"状态：{s}")
+        if hasattr(self, "header_status"):
+            self.header_status.setText(s)
+            self.header_status.setStyleSheet(
+                f"QLabel#statusBadge{{background:{bg};color:{fg};border-radius:10px;"
+                f"padding:3px 10px;font-size:11px;}}")
         self.stop_btn.setEnabled(self.running)
         u = self.usage or {}
         pu = (self.project_usage or {}).get("total", {}) or {}
@@ -768,7 +801,7 @@ class MainWindow(QMainWindow):
             return await asyncio.to_thread(answer_q.get)
 
         try:
-            asyncio.run(run_pipeline(req, on_event, ask, stop_event=stop_event))
+            asyncio.run(run_auto(req, on_event, ask, stop_event=stop_event))
         except Exception as e:
             event_q.put(("error", "", f"{type(e).__name__}: {e}"))
         finally:

@@ -100,12 +100,28 @@ class UsageStore:
         }
 
 
-def instrument_client(client, tracker: UsageTracker, role: str, model: str):
-    """包装 create / create_stream，把每次调用的 usage 记入 tracker。"""
+def instrument_client(client, tracker: UsageTracker, role: str, model: str,
+                      disable_thinking: bool = False):
+    """包装 create / create_stream，把每次调用的 usage 记入 tracker。
+
+    disable_thinking=True 时给每次调用注入 extra_body={"thinking": {"type": "disabled"}}：
+    DeepSeek thinking 模型在多轮对话中要求 reasoning_content 原样回传，
+    关闭 thinking 可避免 400（固定流程单轮不受影响，Swarm 多轮必需）。
+    """
     orig_create = client.create
 
+    def _inject(kwargs):
+        if not disable_thinking:
+            return kwargs
+        extra = dict(kwargs.get("extra_create_args") or {})
+        body = dict(extra.get("extra_body") or {})
+        body["thinking"] = {"type": "disabled"}
+        extra["extra_body"] = body
+        kwargs["extra_create_args"] = extra
+        return kwargs
+
     async def create(*args, **kwargs):
-        result = await orig_create(*args, **kwargs)
+        result = await orig_create(*args, **_inject(kwargs))
         u = getattr(result, "usage", None)
         if u is not None:
             tracker.add(role, model, u.prompt_tokens, u.completion_tokens)
@@ -117,7 +133,7 @@ def instrument_client(client, tracker: UsageTracker, role: str, model: str):
 
     def create_stream(*args, **kwargs):
         async def gen():
-            async for item in orig_stream(*args, **kwargs):
+            async for item in orig_stream(*args, **_inject(kwargs)):
                 u = getattr(item, "usage", None)
                 if u is not None:
                     tracker.add(role, model, u.prompt_tokens, u.completion_tokens)

@@ -101,7 +101,8 @@ def make_client(model: str | None = None, temperature: float | None = None,
     )
     if tracker is not None:
         from .usage import instrument_client
-        instrument_client(client, tracker, role or "default", resolved_model)
+        instrument_client(client, tracker, role or "default", resolved_model,
+                          disable_thinking=(provider == "deepseek"))
     return client
 
 
